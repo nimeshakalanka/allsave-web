@@ -1,0 +1,44 @@
+# Production on one VPS: Caddy (HTTPS) -> Next.js + FastAPI (with the Telegram bot) + MongoDB.
+#   docker compose -f docker-compose.prod.yml up -d --build
+# Needs ./.env with DOMAIN=... and ./backend/.env (see DEPLOY.md). Only Caddy is exposed to the internet.
+services:
+  caddy:
+    image: caddy:2.11.6-alpine
+    ports: ["80:80", "443:443", "443:443/udp"]
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [frontend, backend]
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    env_file: ./backend/.env
+    environment:
+      ALLOWED_ORIGINS: https://${DOMAIN}
+      # Safe because the backend port is not published: only Caddy can reach it.
+      FORWARDED_ALLOW_IPS: "*"
+    volumes: ["telegram_data:/data"]
+    depends_on: [mongo]
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: /
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:7
+    volumes: ["mongo_data:/data/db"]
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
+  telegram_data:
+  mongo_data:
