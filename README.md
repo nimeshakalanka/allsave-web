@@ -101,6 +101,14 @@ The bot is off unless `BOT_TOKEN` is set. If it fails to start (bad token, Mongo
 | `COOLDOWN_MINUTES` | Default `30`. Wait between free downloads |
 | `PREMIUM_DAYS` | Default `30` |
 
+## Telegram bot commands
+
+**Everyone:** `/start`, `/me` (plan and usage), `/history` (last 5 downloads), `/premium`, `/help`.
+
+**Admins (`SUDO`):** `/admin` (button panel with stats, premium users and system info), `/stats`, `/sub <id> [days]`, `/unsub <id>`, `/premiumlist`, `/user <id>`, `/ban <id>`, `/unban <id>`, and `/bcast` as a reply to a message. `/unsub`, `/user`, `/ban` and `/unban` also work as a reply to a user's message.
+
+Full-screen message effects work in private chats only and go through the HTTP Bot API, because pyrogram doesn't support them. If one fails, the bot sends a plain message instead.
+
 ## Deployment
 
 **Everything on one VPS (website, backend, bot, MongoDB, HTTPS):** follow [DEPLOY.md](DEPLOY.md). The sections below describe the alternative split setup (backend on a VPS, frontend on Vercel).
@@ -148,6 +156,7 @@ Serverless platforms that sleep don't qualify. A VPS or an always-on Docker host
 - **Same database.** Users and groups (`main.users`, `main.groups`) and premium subscriptions (`Cluster0.sub1`) are read from the same places, so existing data carries over.
   Premium is now valid while `expiry_date` is in the future, instead of an in-memory scheduler deleting the record, so subscriptions survive restarts.
 - **New collections.** Free-tier counters live in `main.limits` and pending link selections in `main.pending` (a TTL index removes them after 1 h).
+  Download history is in `main.downloads` and banned users in `main.bans`.
 - **New limit semantics.** The old in-memory counter never reset. The new limit is `FREE_DAILY_LIMIT` per rolling 24 h plus the cooldown.
   A failed download is refunded.
 - **Removed.** Per-site scrapers, Facebook/Envato/adult handlers, global variables, fixed filenames, and scanning the working directory.

@@ -1,6 +1,7 @@
 import pytest
 
 from app.errors import APIError
+from app import urls
 from app.urls import SafeRedirectHandler, validate_url
 
 
@@ -108,3 +109,32 @@ def test_rejects_unresolvable_host() -> None:
 def test_redirects_to_disallowed_targets_are_blocked(target: str) -> None:
     with pytest.raises(APIError):
         SafeRedirectHandler().redirect_request(None, None, 302, "Found", {}, target)
+
+
+class FakeResponse:
+    def __init__(self, url: str) -> None:
+        self.url = url
+
+    def __enter__(self) -> "FakeResponse":
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        pass
+
+
+@pytest.mark.parametrize(("final", "expected"), [
+    ("https://www.facebook.com/reel/978314331995163/?fs=e", "https://www.facebook.com/reel/978314331995163/?fs=e"),
+    ("https://www.facebook.com/login/?next=https%3A%2F%2Fwww.facebook.com%2Freel%2F123%2F", "https://www.facebook.com/reel/123/"),
+])
+def test_facebook_share_links_are_expanded(monkeypatch: pytest.MonkeyPatch, final: str, expected: str) -> None:
+    monkeypatch.setattr(urls, "resolve_host", public)
+    monkeypatch.setattr(urls.yt_dlp.YoutubeDL, "urlopen", lambda _, __: FakeResponse(final))
+    assert urls.normalize("https://www.facebook.com/share/v/19ic1QBvm4/?mibextid=wwXIfr") == ("facebook", expected)
+
+
+@pytest.mark.parametrize("final", ["https://evil.example/x", "https://www.facebook.com/login/"])
+def test_facebook_share_rejects_bad_destinations(monkeypatch: pytest.MonkeyPatch, final: str) -> None:
+    monkeypatch.setattr(urls, "resolve_host", public)
+    monkeypatch.setattr(urls.yt_dlp.YoutubeDL, "urlopen", lambda _, __: FakeResponse(final))
+    with pytest.raises(APIError):
+        urls.normalize("https://fb.watch/abc/")

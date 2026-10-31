@@ -6,7 +6,10 @@ import socket
 import urllib.error
 import urllib.request
 from collections.abc import Callable
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import parse_qs, urlsplit, urlunsplit
+
+import yt_dlp
+import yt_dlp.networking.exceptions
 
 from .errors import APIError
 
@@ -91,12 +94,34 @@ def follow_short_link(url: str, proxy_url: str | None = None) -> str:
         raise _invalid("Could not open that short link.") from None
 
 
+def resolve_facebook_link(url: str, proxy_url: str | None = None) -> str:
+    """Expand fb.watch and /share/ links with yt-dlp's networking; Facebook doesn't redirect plain clients.
+
+    yt-dlp follows the hops itself, so only the final URL is validated (by the caller). The start host is allowlisted.
+    """
+    opts: dict[str, object] = {"quiet": True, "no_warnings": True, "socket_timeout": 15}
+    if proxy_url:
+        opts["proxy"] = proxy_url
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl, ydl.urlopen(url) as resp:
+            final = resp.url
+    except (yt_dlp.utils.DownloadError, yt_dlp.networking.exceptions.RequestError, OSError):
+        raise _invalid("Could not open that Facebook link. Check it and try again.") from None
+    parts = urlsplit(final)
+    if parts.path.startswith("/login"):  # logged-out visitors land here with the real link in ?next=
+        target = parse_qs(parts.query).get("next", [""])[0]
+        if not target or urlsplit(target).path.startswith(("/share/", "/login")):
+            raise APIError(403, "login_required", "Facebook wants a login for this link. Open the video and copy its full link.")
+        return target
+    return final
+
+
 def normalize(raw: str, proxy_url: str | None = None) -> tuple[str, str]:
     """Validate, expand short links (re-validating every hop) and return (platform, url). Blocking."""
     platform, url = validate_url(raw)
     parts = urlsplit(url)
-    if parts.hostname in SHORT_HOSTS or (platform == "facebook" and parts.path.startswith("/share/")):
+    if platform == "facebook" and (parts.hostname in SHORT_HOSTS or parts.path.startswith("/share/")):
+        platform, url = validate_url(resolve_facebook_link(url, proxy_url))
+    elif parts.hostname in SHORT_HOSTS:
         platform, url = validate_url(follow_short_link(url, proxy_url))
-        if platform == "facebook" and urlsplit(url).path.startswith("/login"):
-            raise APIError(403, "login_required", "Facebook wants a login for this link. Open the video and copy its full link.")
     return platform, url

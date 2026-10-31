@@ -36,18 +36,25 @@ class Store:
         self.groups = main["groups"]
         self.limits = main["limits"]
         self.pending = main["pending"]
+        self.downloads = main["downloads"]
+        self.bans = main["bans"]
         self.subs = self.client[cfg.SUBS_DB][cfg.SUBS_COLLECTION]
 
     async def init(self) -> None:
         await self.pending.create_index("created_at", expireAfterSeconds=3600)
         await self.subs.create_index("user_id")
+        await self.downloads.create_index([("user_id", 1), ("at", -1)])
+        await self.downloads.create_index("at")
 
     async def close(self) -> None:
         await self.client.close()
 
     # users / groups (same documents as the original bot: ids stored as strings)
-    async def add_user(self, user_id: int) -> None:
-        await self.users.update_one({"user_id": str(user_id)}, {"$setOnInsert": {"user_id": str(user_id)}}, upsert=True)
+    async def add_user(self, user_id: int) -> bool:
+        """Returns True the first time this user is seen."""
+        result = await self.users.update_one({"user_id": str(user_id)}, {"$setOnInsert": {"user_id": str(user_id)}},
+                                             upsert=True)
+        return result.upserted_id is not None
 
     async def remove_user(self, user_id: int | str) -> None:
         await self.users.delete_one({"user_id": str(user_id)})
@@ -62,6 +69,33 @@ class Store:
     def all_user_ids(self):  # type: ignore[no-untyped-def]
         return self.users.find({}, {"user_id": 1, "_id": 0})
 
+    # bans
+    async def is_banned(self, user_id: int) -> bool:
+        return await self.bans.find_one({"_id": user_id}) is not None
+
+    async def ban(self, user_id: int) -> None:
+        await self.bans.update_one({"_id": user_id}, {"$set": {"at": _now()}}, upsert=True)
+
+    async def unban(self, user_id: int) -> bool:
+        return (await self.bans.delete_one({"_id": user_id})).deleted_count > 0
+
+    # download history and statistics
+    async def log_download(self, user_id: int, platform: str, kind: str, title: str, url: str) -> None:
+        await self.downloads.insert_one({"user_id": user_id, "platform": platform, "kind": kind, "title": title[:200],
+                                         "url": url, "at": _now()})
+
+    async def recent_downloads(self, user_id: int, limit: int = 5) -> list[dict[str, Any]]:
+        return await self.downloads.find({"user_id": user_id}).sort("at", -1).limit(limit).to_list()
+
+    async def total_downloads(self, user_id: int) -> int:
+        return await self.downloads.count_documents({"user_id": user_id})
+
+    async def download_stats(self) -> dict[str, Any]:
+        since = _now() - WINDOW
+        rows = await (await self.downloads.aggregate([{"$group": {"_id": "$platform", "n": {"$sum": 1}}}])).to_list()
+        return {"total": sum(r["n"] for r in rows), "by_platform": {r["_id"]: r["n"] for r in rows},
+                "today": await self.downloads.count_documents({"at": {"$gt": since}})}
+
     # premium
     async def is_premium(self, user_id: int) -> bool:
         return await self.subs.find_one({"user_id": user_id, "expiry_date": {"$gt": _now()}}) is not None
@@ -75,7 +109,23 @@ class Store:
             upsert=True, return_document=True)
         return _aware(doc["expiry_date"])
 
+    async def premium_expiry(self, user_id: int) -> datetime | None:
+        doc = await self.subs.find_one({"user_id": user_id, "expiry_date": {"$gt": _now()}}, sort=[("expiry_date", -1)])
+        return _aware(doc["expiry_date"]) if doc else None
+
+    async def remove_premium(self, user_id: int) -> bool:
+        return (await self.subs.delete_many({"user_id": user_id})).deleted_count > 0
+
+    async def list_premium(self, limit: int = 30) -> list[dict[str, Any]]:
+        return await self.subs.find({"expiry_date": {"$gt": _now()}}).sort("expiry_date", 1).limit(limit).to_list()
+
     # free-tier limits: FREE_DAILY_LIMIT downloads per 24h window, COOLDOWN_MINUTES between downloads
+    async def free_left(self, user_id: int) -> int:
+        doc = await self.limits.find_one({"_id": user_id})
+        if not doc or _aware(doc["window_start"]) + WINDOW <= _now():
+            return self.cfg.FREE_DAILY_LIMIT
+        return max(0, self.cfg.FREE_DAILY_LIMIT - doc.get("count", 0))
+
     async def limit_reason(self, user_id: int) -> str | None:
         """Why a free user can't download right now, or None if they can."""
         doc = await self.limits.find_one({"_id": user_id})
@@ -116,10 +166,11 @@ class Store:
             "last": {"$ifNull": ["$prev_last", "$$REMOVE"]}}}])
 
     # pending selections: the link + options shown as inline buttons (callback_data is limited to 64 bytes)
-    async def save_pending(self, user_id: int, url: str, title: str, options: list[dict[str, Any]]) -> str:
+    async def save_pending(self, user_id: int, url: str, title: str, platform: str,
+                           options: list[dict[str, Any]]) -> str:
         token = secrets.token_hex(6)
         await self.pending.insert_one({"_id": token, "user_id": user_id, "url": url, "title": title,
-                                       "options": options, "created_at": _now()})
+                                       "platform": platform, "options": options, "created_at": _now()})
         return token
 
     async def get_pending(self, token: str) -> dict[str, Any] | None:
