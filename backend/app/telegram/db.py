@@ -172,7 +172,7 @@ class Store:
         now = _now()
         window_end = _aware(doc["window_start"]) + WINDOW
         if doc.get("count", 0) >= conf["free_daily_limit"] and window_end > now:
-            return (f"You've used your {conf["free_daily_limit"]} free downloads for today. "
+            return (f"You've used your {conf['free_daily_limit']} free downloads for today. "
                     f"Try again in {_fmt_wait(window_end - now)}, or get Premium for unlimited downloads.")
         if doc.get("last") and (ready := _aware(doc["last"]) + timedelta(minutes=conf["cooldown_minutes"])) > now:
             return f"Please wait {_fmt_wait(ready - now)} before your next download, or get Premium to skip the wait."
