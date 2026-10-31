@@ -26,6 +26,8 @@ class Settings:
     served_grace: int = 60  # seconds a file stays available after it was streamed once
     cookies_file: str | None = None
     proxy_url: str | None = None
+    mongo_uri: str | None = None  # enables the permanent activity log
+    activity_db: str = "main"
     rate_limit_info: str = "20/minute"
     rate_limit_jobs: str = "10/minute"
     work_root: Path = Path(tempfile.gettempdir()) / "allsave-jobs"
@@ -47,6 +49,8 @@ class Settings:
             job_ttl=_int("JOB_TTL", cls.job_ttl),
             cookies_file=_opt("YTDLP_COOKIES_FILE"),
             proxy_url=_opt("PROXY_URL"),
+            mongo_uri=_opt("MONGO_URI"),
+            activity_db=os.getenv("USERS_DB", cls.activity_db),
             rate_limit_info=os.getenv("RATE_LIMIT_INFO", cls.rate_limit_info),
             rate_limit_jobs=os.getenv("RATE_LIMIT_JOBS", cls.rate_limit_jobs),
             work_root=Path(work_dir) if work_dir else cls.work_root,

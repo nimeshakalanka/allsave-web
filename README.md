@@ -23,6 +23,7 @@ Telegram users <──── MTProto ───────> └─ Telegram bot 
 | POST | `/api/jobs` | `{url, option_id}` → `{job_id}` |
 | GET | `/api/jobs/{id}` | `{status: queued\|downloading\|processing\|done\|error, progress, error}` |
 | GET | `/api/jobs/{id}/file` | Streams the file; it is deleted ~60 s after being served |
+| POST | `/api/visit` | Records one website visit (204, no body) |
 | GET | `/healthz` | `{status: "ok"}` |
 
 Errors are always `{"error": {"code", "message"}}`. Codes include `unsupported_site`, `invalid_url`, `private`,
@@ -103,9 +104,15 @@ The bot is off unless `BOT_TOKEN` is set. If it fails to start (bad token, Mongo
 
 ## Telegram bot commands
 
-**Everyone:** `/start`, `/me` (plan and usage), `/history` (last 5 downloads), `/premium`, `/help`.
+**Everyone:** `/start`, `/me` (plan and usage), `/history` (last 5 downloads), `/premium`, `/refer` (invite link), `/help`.
 
-**Admins (`SUDO`):** `/admin` (button panel with stats, premium users and system info), `/stats`, `/sub <id> [days]`, `/unsub <id>`, `/premiumlist`, `/user <id>`, `/ban <id>`, `/unban <id>`, and `/bcast` as a reply to a message. `/unsub`, `/user`, `/ban` and `/unban` also work as a reply to a user's message.
+**Admins (`SUDO`):** `/admin` (button panel with stats, activity, premium users and system info), `/stats`, `/activity [days]`, `/log <id>`, `/sub <id> [days]`, `/unsub <id>`, `/premiumlist`, `/user <id>`, `/ban <id>`, `/unban <id>`, and `/bcast` as a reply to a message. `/unsub`, `/user`, `/ban` and `/unban` also work as a reply to a user's message.
+
+**Live settings.** `/settings` changes values without a restart, and they're stored in `main.settings`: `/settings limit 4`, `/settings wait 15`, `/settings free 12h` (free unlimited for everyone; `3d` or `off` also work) and `/settings refer 3 3` (friends, days). `FREE_DAILY_LIMIT` and `COOLDOWN_MINUTES` are only the defaults until you change them.
+
+**Referrals.** Each user's link is `t.me/<bot>?start=ref_<id>`. Only users who are new to the bot count, once each, in `main.referrals`. Every 3 referrals earns 3 days of premium by default.
+
+**Activity log.** Bot and website events are stored permanently in `main.activity` whenever `MONGO_URI` is set, so they survive restarts and are never auto-deleted. Bot users are stored by Telegram ID, including the links they send. Website visitors are stored only as a salted hash of their IP, and website links aren't stored, only the platform.
 
 Full-screen message effects work in private chats only and go through the HTTP Bot API, because pyrogram doesn't support them. If one fails, the bot sends a plain message instead.
 

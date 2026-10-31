@@ -2,9 +2,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from unittest.mock import AsyncMock
+
 from fastapi.testclient import TestClient
 
 from app import media, urls
+from app.activity import ActivityLog
 from app.config import Settings
 from app.main import create_app
 from app.media import build_options
@@ -136,3 +139,62 @@ def test_job_lifecycle_and_cleanup(client: TestClient, monkeypatch: pytest.Monke
     manager.purge()
     assert not (tmp_path / job_id).exists()
     assert client.get(f"/api/jobs/{job_id}").status_code == 404
+
+
+class FakeCollection:
+    def __init__(self) -> None:
+        self.docs: list[dict[str, Any]] = []
+
+    async def insert_one(self, doc: dict[str, Any]) -> None:
+        self.docs.append(doc)
+
+
+@pytest.fixture
+def activity_client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    monkeypatch.setattr(urls, "resolve_host", lambda _: ["142.250.80.46"])
+    collection = FakeCollection()
+
+    async def fake_hash(_: ActivityLog, ip: str) -> str:
+        return f"hashed-{len(ip)}"
+
+    monkeypatch.setattr(ActivityLog, "_db", lambda _: {"activity": collection})
+    monkeypatch.setattr(ActivityLog, "_hash", fake_hash)
+    monkeypatch.setattr(ActivityLog, "init", AsyncMock())
+    monkeypatch.setattr(ActivityLog, "close", AsyncMock())
+    settings = Settings(work_root=tmp_path, mongo_uri="mongodb://fake")
+    with TestClient(create_app(settings, run_bot=False)) as c:
+        yield c, collection
+
+
+def test_web_activity_is_recorded_without_raw_ip(activity_client) -> None:  # type: ignore[no-untyped-def]
+    client, collection = activity_client
+    assert client.post("/api/visit").status_code == 204
+    client.post("/api/info", json={"url": "https://example.com/x"})
+    client.get("/healthz")  # lets queued writes run
+    events = {d["event"]: d for d in collection.docs}
+    assert events["visit"]["source"] == "web"
+    assert events["fetch_failed"]["code"] == "unsupported_site" and "url" not in events["fetch_failed"]
+    assert all(str(d["actor"]).startswith("hashed-") for d in collection.docs)
+
+
+def test_job_outcome_is_recorded(activity_client, monkeypatch: pytest.MonkeyPatch) -> None:  # type: ignore[no-untyped-def]
+    client, collection = activity_client
+
+    def fake_download(url, platform, option_id, workdir: Path, s, report):  # type: ignore[no-untyped-def]
+        out = workdir / "media.mp3"
+        out.write_bytes(b"x")
+        return out, "Song"
+
+    monkeypatch.setattr(media, "download", fake_download)
+    job_id = client.post("/api/jobs", json={"url": "https://youtu.be/abc", "option_id": "audio"}).json()["job_id"]
+    for _ in range(50):
+        if client.get(f"/api/jobs/{job_id}").json()["status"] == "done":
+            break
+    client.get("/healthz")
+    done = [d for d in collection.docs if d["event"] == "download_ok"]
+    assert done and done[0]["platform"] == "youtube" and done[0]["kind"] == "audio"
+
+
+def test_activity_is_noop_without_mongo() -> None:
+    assert not ActivityLog(Settings()).enabled
+    ActivityLog(Settings()).record("web", "visit", "1.2.3.4")  # must not need an event loop or a database

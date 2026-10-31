@@ -9,6 +9,7 @@ import {
   formatSize,
   getInfo,
   getJob,
+  trackVisit,
   type JobStatus,
   type MediaInfo,
   type MediaOption,
@@ -32,6 +33,17 @@ export default function Downloader() {
   const [error, setError] = useState<string | null>(null);
   const [job, setJob] = useState<Job | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Count one visit per browser session.
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem("allsave-visit")) return;
+      sessionStorage.setItem("allsave-visit", "1");
+    } catch {
+      // storage blocked: still count the visit
+    }
+    trackVisit();
+  }, []);
 
   // Poll the active job until it finishes.
   useEffect(() => {

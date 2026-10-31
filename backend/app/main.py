@@ -7,7 +7,7 @@ import mimetypes
 from collections.abc import AsyncIterator
 from typing import Annotated
 
-from fastapi import FastAPI, Path, Request
+from fastapi import FastAPI, Path, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -18,6 +18,7 @@ from slowapi.util import get_remote_address
 from starlette.background import BackgroundTask
 
 from . import media, urls
+from .activity import ActivityLog
 from .config import Settings
 from .errors import APIError
 from .jobs import JobManager, Status
@@ -52,13 +53,14 @@ def _error(status: int, code: str, message: str) -> JSONResponse:
 
 def create_app(settings: Settings | None = None, *, run_bot: bool = True) -> FastAPI:
     s = settings or Settings.from_env()
-    jobs = JobManager(s)
+    jobs = JobManager(s, ActivityLog(s))
     svc = AllSave(s, jobs)
     limiter = Limiter(key_func=get_remote_address)
 
     @contextlib.asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         jobs.start()
+        await jobs.activity.init()
         sweeper = asyncio.create_task(jobs.sweep_forever())
         bot = None
         if run_bot:
@@ -72,6 +74,7 @@ def create_app(settings: Settings | None = None, *, run_bot: bool = True) -> Fas
             await bot.shutdown()
         sweeper.cancel()
         jobs.purge(everything=True)
+        await jobs.activity.close()
 
     app = FastAPI(title="AllSave API", lifespan=lifespan)
     app.state.limiter = limiter
@@ -94,12 +97,12 @@ def create_app(settings: Settings | None = None, *, run_bot: bool = True) -> Fas
     @app.post("/api/info", response_model=media.MediaInfo)
     @limiter.limit(s.rate_limit_info)
     async def info(request: Request, body: InfoRequest) -> media.MediaInfo:
-        return await svc.info(body.url)
+        return await svc.info(body.url, "web", get_remote_address(request))
 
     @app.post("/api/jobs", response_model=JobCreated)
     @limiter.limit(s.rate_limit_jobs)
     async def create_job(request: Request, body: JobRequest) -> JobCreated:
-        return JobCreated(job_id=(await svc.create_job(body.url, body.option_id)).id)
+        return JobCreated(job_id=(await svc.create_job(body.url, body.option_id, "web", get_remote_address(request))).id)
 
     @app.get("/api/jobs/{job_id}", response_model=JobStatus)
     @limiter.limit("240/minute")
@@ -114,8 +117,15 @@ def create_app(settings: Settings | None = None, *, run_bot: bool = True) -> Fas
         if job.status != "done" or not job.file or not job.file.exists():
             raise APIError(409, "not_ready", "The file is not ready yet.")
         media_type = mimetypes.guess_type(job.file.name)[0] or "application/octet-stream"
+        jobs.activity.record("web", "file_saved", get_remote_address(request), platform=job.platform)
         return FileResponse(job.file, media_type=media_type, filename=job.filename,
                             background=BackgroundTask(jobs.served, job.id))
+
+    @app.post("/api/visit", status_code=204)
+    @limiter.limit("30/minute")
+    async def visit(request: Request) -> Response:
+        jobs.activity.record("web", "visit", get_remote_address(request))
+        return Response(status_code=204)
 
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:

@@ -38,6 +38,8 @@ class Store:
         self.pending = main["pending"]
         self.downloads = main["downloads"]
         self.bans = main["bans"]
+        self.settings = main["settings"]
+        self.referrals = main["referrals"]
         self.subs = self.client[cfg.SUBS_DB][cfg.SUBS_COLLECTION]
 
     async def init(self) -> None:
@@ -45,6 +47,7 @@ class Store:
         await self.subs.create_index("user_id")
         await self.downloads.create_index([("user_id", 1), ("at", -1)])
         await self.downloads.create_index("at")
+        await self.referrals.create_index("by")
 
     async def close(self) -> None:
         await self.client.close()
@@ -68,6 +71,39 @@ class Store:
 
     def all_user_ids(self):  # type: ignore[no-untyped-def]
         return self.users.find({}, {"user_id": 1, "_id": 0})
+
+    # live settings, editable with /settings; env values are only the defaults
+    async def get_settings(self) -> dict[str, Any]:
+        doc = await self.settings.find_one({"_id": "bot"}) or {}
+        return {"free_daily_limit": doc.get("free_daily_limit", self.cfg.FREE_DAILY_LIMIT),
+                "cooldown_minutes": doc.get("cooldown_minutes", self.cfg.COOLDOWN_MINUTES),
+                "refer_count": doc.get("refer_count", 3), "refer_days": doc.get("refer_days", 3),
+                "free_until": _aware(doc["free_until"]) if doc.get("free_until") else None}
+
+    async def update_settings(self, **values: Any) -> None:
+        await self.settings.update_one({"_id": "bot"}, {"$set": values}, upsert=True)
+
+    async def promo_until(self) -> datetime | None:
+        """End of the current free-for-everyone period, if one is running."""
+        until = (await self.get_settings())["free_until"]
+        return until if until and until > _now() else None
+
+    async def has_unlimited(self, user_id: int) -> bool:
+        return await self.promo_until() is not None or await self.is_premium(user_id)
+
+    # referrals: one document per invited user, so nobody can be counted twice
+    async def add_referral(self, user_id: int, by: int) -> int | None:
+        """Credit `by` for inviting `user_id`. Returns their new total, or None if it doesn't count."""
+        if user_id == by or await self.is_banned(by) or not await self.users.find_one({"user_id": str(by)}):
+            return None
+        try:
+            await self.referrals.insert_one({"_id": user_id, "by": by, "at": _now()})
+        except DuplicateKeyError:
+            return None
+        return await self.referral_count(by)
+
+    async def referral_count(self, user_id: int) -> int:
+        return await self.referrals.count_documents({"by": user_id})
 
     # bans
     async def is_banned(self, user_id: int) -> bool:
@@ -121,34 +157,37 @@ class Store:
 
     # free-tier limits: FREE_DAILY_LIMIT downloads per 24h window, COOLDOWN_MINUTES between downloads
     async def free_left(self, user_id: int) -> int:
+        limit = (await self.get_settings())["free_daily_limit"]
         doc = await self.limits.find_one({"_id": user_id})
         if not doc or _aware(doc["window_start"]) + WINDOW <= _now():
-            return self.cfg.FREE_DAILY_LIMIT
-        return max(0, self.cfg.FREE_DAILY_LIMIT - doc.get("count", 0))
+            return limit
+        return max(0, limit - doc.get("count", 0))
 
     async def limit_reason(self, user_id: int) -> str | None:
         """Why a free user can't download right now, or None if they can."""
+        conf = await self.get_settings()
         doc = await self.limits.find_one({"_id": user_id})
         if not doc:
             return None
         now = _now()
         window_end = _aware(doc["window_start"]) + WINDOW
-        if doc.get("count", 0) >= self.cfg.FREE_DAILY_LIMIT and window_end > now:
-            return (f"You've used your {self.cfg.FREE_DAILY_LIMIT} free downloads for today. "
+        if doc.get("count", 0) >= conf["free_daily_limit"] and window_end > now:
+            return (f"You've used your {conf["free_daily_limit"]} free downloads for today. "
                     f"Try again in {_fmt_wait(window_end - now)}, or get Premium for unlimited downloads.")
-        if doc.get("last") and (ready := _aware(doc["last"]) + timedelta(minutes=self.cfg.COOLDOWN_MINUTES)) > now:
+        if doc.get("last") and (ready := _aware(doc["last"]) + timedelta(minutes=conf["cooldown_minutes"])) > now:
             return f"Please wait {_fmt_wait(ready - now)} before your next download, or get Premium to skip the wait."
         return None
 
     async def consume(self, user_id: int) -> str | None:
         """Atomically take one free download. Returns None on success, else the reason it was refused."""
         now = _now()
-        window_cut, cool_cut = now - WINDOW, now - timedelta(minutes=self.cfg.COOLDOWN_MINUTES)
+        conf = await self.get_settings()
+        window_cut, cool_cut = now - WINDOW, now - timedelta(minutes=conf["cooldown_minutes"])
         expired = {"$lt": [{"$ifNull": ["$window_start", EPOCH]}, window_cut]}
         try:
             await self.limits.update_one(
                 {"_id": user_id,
-                 "$and": [{"$or": [{"window_start": {"$lt": window_cut}}, {"count": {"$lt": self.cfg.FREE_DAILY_LIMIT}}]},
+                 "$and": [{"$or": [{"window_start": {"$lt": window_cut}}, {"count": {"$lt": conf["free_daily_limit"]}}]},
                           {"$or": [{"last": {"$lt": cool_cut}}, {"last": {"$exists": False}}]}]},
                 [{"$set": {"window_start": {"$cond": [expired, now, "$window_start"]},
                            "count": {"$cond": [expired, 1, {"$add": [{"$ifNull": ["$count", 0]}, 1]}]},

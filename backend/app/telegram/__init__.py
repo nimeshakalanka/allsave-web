@@ -28,6 +28,7 @@ async def start_bot(svc: AllSave) -> AllSaveBot | None:
         await bot.set_bot_commands([
             BotCommand("start", "Main menu"), BotCommand("me", "My plan and usage"),
             BotCommand("history", "My recent downloads"), BotCommand("premium", "Unlimited downloads"),
+            BotCommand("refer", "Invite friends, get free premium"),
             BotCommand("help", "How to use the bot")])
     except Exception:
         log.warning("Could not set the bot command menu")

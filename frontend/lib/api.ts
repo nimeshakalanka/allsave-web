@@ -61,6 +61,11 @@ export const createJob = (url: string, optionId: string) =>
 
 export const getJob = (jobId: string) => request<JobStatus>(`/api/jobs/${jobId}`);
 
+/** Fire-and-forget page visit count; never affects the page. */
+export function trackVisit(): void {
+  fetch(`${API_URL}/api/visit`, { method: "POST", keepalive: true }).catch(() => undefined);
+}
+
 export const fileUrl = (jobId: string) => `${API_URL}/api/jobs/${jobId}/file`;
 
 export function formatDuration(seconds: number | null): string {
