@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import html
+import logging
 import re
 from typing import Any
 
@@ -15,6 +16,7 @@ from ..service import AllSave
 from .config import TelegramConfig
 from .db import Store
 
+log = logging.getLogger("allsave.telegram")
 HTML = enums.ParseMode.HTML
 URL_RE = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
 Kb = list[list[InlineKeyboardButton]]
@@ -120,6 +122,18 @@ async def in_channel(client: AllSaveBot, user_id: int) -> bool:
         return True
     except errors.UserNotParticipant:
         return False
+    except (errors.RPCError, KeyError, ValueError):  # a wrong CHID must not silently lock every user out
+        log.exception("Could not check channel %s; is the bot an admin there?", client.cfg.CHID)
+        return True
+
+
+async def send_welcome(client: AllSaveBot, user_id: int, mention: str, photo: str) -> None:
+    text, markup = client.start_text(mention), InlineKeyboardMarkup(client.start_kb())
+    try:
+        await client.send_photo(user_id, photo=photo, caption=text, reply_markup=markup)
+    except errors.RPCError:  # Telegram could not fetch the image; the user still gets a reply
+        log.exception("Welcome photo failed")
+        await client.send_message(user_id, text, reply_markup=markup)
 
 
 # ---- basic commands -------------------------------------------------------------------------------------------
@@ -127,6 +141,7 @@ async def in_channel(client: AllSaveBot, user_id: int) -> bool:
 async def start(client: AllSaveBot, message: Message) -> None:
     if not message.from_user:
         return
+    log.info("/start from %s in %s", message.from_user.id, message.chat.type)
     if not await in_channel(client, message.from_user.id):
         await message.reply_text(
             f"**⚠️Access Denied!⚠️\n\nTo use me, please join the Bots Updates Channel first: [Join Channel]({client.cfg.CHANNEL_LINK}).**",
@@ -134,9 +149,8 @@ async def start(client: AllSaveBot, message: Message) -> None:
         return
     if message.chat.type == enums.ChatType.PRIVATE:
         await client.store.add_user(message.from_user.id)
-        await client.send_photo(message.from_user.id, photo="https://telegra.ph/file/0351e7d492b896af35c1f.png",
-                                caption=client.start_text(message.from_user.mention),
-                                reply_markup=InlineKeyboardMarkup(client.start_kb()))
+        await send_welcome(client, message.from_user.id, message.from_user.mention,
+                           "https://telegra.ph/file/0351e7d492b896af35c1f.png")
     else:
         await client.store.add_group(message.chat.id)
         await message.reply_text(
@@ -150,9 +164,8 @@ async def chk(client: AllSaveBot, cb: CallbackQuery) -> None:
         return
     if cb.message.chat.type == enums.ChatType.PRIVATE:
         await client.store.add_user(cb.from_user.id)
-        await client.send_photo(cb.from_user.id, photo="https://telegra.ph/file/6aa7c012295bbf509aaa7.png",
-                                caption=client.start_text(cb.from_user.mention),
-                                reply_markup=InlineKeyboardMarkup(client.start_kb()))
+        await send_welcome(client, cb.from_user.id, cb.from_user.mention,
+                           "https://telegra.ph/file/6aa7c012295bbf509aaa7.png")
 
 
 async def menu_buttons(client: AllSaveBot, cb: CallbackQuery) -> None:
