@@ -21,6 +21,9 @@ def resolves_to(*addrs: str):
     ("https://youtu.be/dQw4w9WgXcQ?si=xyz", "youtube"),
     ("https://www.instagram.com/reel/Cabc123/", "instagram"),
     ("https://instagram.com/p/Cabc123/", "instagram"),
+    ("https://www.facebook.com/watch/?v=123", "facebook"),
+    ("https://web.facebook.com/user/videos/123/", "facebook"),
+    ("https://fb.watch/abc123/", "facebook"),
 ])
 def test_accepts_allowlisted(url: str, platform: str) -> None:
     assert validate_url(url, public)[0] == platform
@@ -57,7 +60,8 @@ def test_rejects_invalid(url: str) -> None:
     "https://www.envato.com/item/1",
     "https://elements.envato.com/x",
     "https://www.pornhub.com/view_video.php?viewkey=1",
-    "https://www.facebook.com/watch?v=1",
+    "https://www.dailymotion.com/video/x1",
+    "https://facebook.com.evil.com/watch?v=1",
     "https://youtube.com.evil.com/watch?v=abc",
     "https://evil-youtube.com/watch?v=abc",
     "https://notinstagram.com/p/x",

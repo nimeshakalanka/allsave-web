@@ -59,7 +59,7 @@ START_TEXT = """**👋👋 Hello there,** {mention}
 
 I'm **[All Save Bot 🍀]({link})**, at your service! 💪
 
-Send me a **TikTok, YouTube or Instagram** link and pick a quality — or grab just the MP3 audio. TikTok videos come without watermark when available. 🎥🎵
+Send me a **TikTok, YouTube, Instagram or Facebook** link and pick a quality — or grab just the MP3 audio. TikTok videos come without watermark when available. 🎥🎵
 
 I'm group-friendly too! Use me in your groups to share and save videos with your friends. 🤝👥"""
 CMD_TEXT = """Here are the commands available for this bot:
@@ -72,7 +72,7 @@ CMD_TEXT = """Here are the commands available for this bot:
 <code>/stats</code>: Bot statistics (admins only).
 
 Just send a link to start downloading! 💫🤖"""
-ABOUT_TEXT = """👋👋 I'm **All Save Bot ☘️**. I download videos and audio from **TikTok, YouTube and Instagram**.
+ABOUT_TEXT = """👋👋 I'm **All Save Bot ☘️**. I download videos and audio from **TikTok, YouTube, Instagram and Facebook**.
 
 Please download only content you have the right to save, and respect creators and platform terms.
 
@@ -91,7 +91,8 @@ I am **All Save Bot ☘️**. Send me a link like:
 
 <code>https://www.tiktok.com/@user/video/7123456789
 https://youtu.be/dQw4w9WgXcQ
-https://www.instagram.com/reel/Cabc123/</code>
+https://www.instagram.com/reel/Cabc123/
+https://www.facebook.com/watch/?v=123456789</code>
 
 Then choose a video quality or MP3 audio. __Send me a video link__"""
 

@@ -18,7 +18,7 @@ Info = dict[str, Any]
 Report = Callable[[str, float], None]  # (status, progress 0..100)
 
 # yt-dlp extractor names (lowercased, regex) we allow; everything else, including "generic", is disabled.
-EXTRACTORS = ["youtube", "youtubeytbe", "tiktok", "vm.tiktok", "instagram", "instagramios"]
+EXTRACTORS = ["youtube", "youtubeytbe", "tiktok", "vm.tiktok", "instagram", "instagramios", "facebook", "facebook:reel"]
 OPTION_ID = re.compile(r"audio|v\d{2,4}|f:[\w.\-]{1,80}")
 AUDIO_KBPS = 192
 MAX_VIDEO_OPTIONS = 6
@@ -120,6 +120,12 @@ def build_options(info: Info, platform: str, max_bytes: int) -> list[MediaOption
             if size and f.get("acodec") in (None, "none") and audio_size:
                 size += audio_size
             add_video(f"v{f['height']}", f, f"{_res(f)}p", size, None, "mp4")
+        # Some sites (Facebook) list only progressive formats with no height; offer the best one.
+        unsized = [f for f in formats if f.get("vcodec") != "none" and f.get("format_id")]
+        if not videos and unsized:
+            f = unsized[-1]
+            add_video(f"f:{f['format_id']}", f, "Best quality", _size(f), None, f.get("ext") or "mp4")
+            videos = unsized
 
     if audios or videos:
         duration = info.get("duration")

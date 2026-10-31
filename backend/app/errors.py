@@ -27,7 +27,7 @@ _RULES: list[tuple[re.Pattern[str], int, str, str]] = [
     (re.compile(r"unavailable|not available|removed|does not exist|deleted|terminated|\b404\b|not found"), 404,
      "removed", "This video was removed or is unavailable."),
     (re.compile(r"unsupported url|no suitable extractor"), 400, "unsupported_site",
-     "This link is not a supported TikTok, YouTube or Instagram video."),
+     "This link is not a supported TikTok, YouTube, Instagram or Facebook video."),
 ]
 
 

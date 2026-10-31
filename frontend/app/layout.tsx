@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AllSave — TikTok, YouTube & Instagram downloader",
-  description: "Save TikTok, YouTube and Instagram videos or MP3 audio for personal use.",
+  title: "AllSave — TikTok, YouTube, Instagram & Facebook downloader",
+  description: "Save TikTok, YouTube, Instagram and Facebook videos or MP3 audio for personal use.",
 };
 
 export const viewport: Viewport = { themeColor: "#09090b", width: "device-width", initialScale: 1 };

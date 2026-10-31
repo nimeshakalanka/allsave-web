@@ -1,6 +1,6 @@
 # AllSave Web
 
-Media downloader for **TikTok, YouTube and Instagram**. One backend service does all the downloading and also runs the Telegram bot.
+Media downloader for **TikTok, YouTube, Instagram and Facebook**. One backend service does all the downloading and also runs the Telegram bot.
 
 ```
 frontend (Next.js, Vercel) ──HTTP──> backend (one Docker container on a VPS)
@@ -36,8 +36,8 @@ If yt-dlp exposes a watermarked TikTok format, both variants are offered. Otherw
 **Safety.**
 - URLs must be https and on an exact host allowlist.
 - Hosts must resolve only to public IPs.
-- Short links (`vm.tiktok.com`, `vt.tiktok.com`) are followed by the backend itself, and every redirect hop is re-validated.
-- yt-dlp is restricted to the TikTok, YouTube and Instagram extractors, so the generic extractor is disabled.
+- Short links (`vm.tiktok.com`, `vt.tiktok.com`, `fb.watch`, Facebook `/share/` links) are followed by the backend itself, and every redirect hop is re-validated.
+- yt-dlp is restricted to the TikTok, YouTube, Instagram and Facebook extractors, so the generic extractor is disabled.
 - Each job runs in its own UUID directory, and only that directory is ever read.
 - Job records and files are purged after `JOB_TTL` (15 min).
 

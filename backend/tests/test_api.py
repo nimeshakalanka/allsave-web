@@ -56,6 +56,12 @@ def test_tiktok_offers_both_watermark_variants() -> None:
     assert all("bytevc2" not in o.id for o in opts)
 
 
+def test_facebook_without_heights_offers_best_quality() -> None:
+    info = {"duration": 30, "formats": [{"format_id": "sd", "ext": "mp4"}, {"format_id": "hd", "ext": "mp4"}]}
+    opts = build_options(info, "facebook", max_bytes=10**9)
+    assert [(o.id, o.kind, o.label) for o in opts] == [("f:hd", "video", "Best quality"), ("audio", "audio", "MP3 · 192 kbps")]
+
+
 def test_tiktok_clean_only_is_labelled() -> None:
     opts = build_options(tiktok_info(watermarked=False), "tiktok", max_bytes=10**9)
     assert all(o.watermark is False for o in opts if o.kind == "video")

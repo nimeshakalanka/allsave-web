@@ -21,7 +21,9 @@ services:
       ALLOWED_ORIGINS: https://${DOMAIN}
       # Safe because the backend port is not published: only Caddy can reach it.
       FORWARDED_ALLOW_IPS: "*"
-    volumes: ["telegram_data:/data"]
+    volumes:
+      - telegram_data:/data
+      - ./secrets:/secrets:ro  # optional cookies.txt; set YTDLP_COOKIES_FILE=/secrets/cookies.txt
     depends_on: [mongo]
     restart: unless-stopped
 

@@ -127,6 +127,16 @@ Useful commands (run in `~/allsave`):
 | Stop everything | `docker compose -f docker-compose.prod.yml down` |
 | Back up MongoDB | `docker compose -f docker-compose.prod.yml exec -T mongo mongodump --archive > mongo-$(date +%F).archive` |
 
+## YouTube cookies (when YouTube blocks the server IP)
+
+Server IPs often get "Sign in to confirm you're not a bot". Use a **throwaway** Google account, never your personal one, because it can get flagged.
+
+1. Open a private browser window, sign in to the throwaway account on youtube.com, and export the cookies in Netscape format as `cookies.txt` (for example with a "cookies.txt" browser extension). Then close the private window so the session isn't rotated.
+2. On the VPS, run `mkdir -p ~/allsave/secrets`, upload the file to `~/allsave/secrets/cookies.txt` (MobaXterm SFTP), then run `chmod 755 ~/allsave/secrets && chmod 644 ~/allsave/secrets/cookies.txt`.
+3. Add `YTDLP_COOKIES_FILE=/secrets/cookies.txt` to `backend/.env` and run `docker compose -f docker-compose.prod.yml up -d backend`.
+
+`secrets/` is git-ignored. The file is a login credential, so don't share or commit it. When the block comes back, export fresh cookies and restart the backend. If cookies keep failing, use `PROXY_URL` instead.
+
 ## Troubleshooting
 
 | Problem | Fix |

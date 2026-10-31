@@ -1,7 +1,7 @@
 // Use "/" when the frontend and API are served from the same domain (the VPS setup behind Caddy).
 export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/+$/, "");
 
-export type Platform = "tiktok" | "youtube" | "instagram";
+export type Platform = "tiktok" | "youtube" | "instagram" | "facebook";
 
 export interface MediaOption {
   id: string;

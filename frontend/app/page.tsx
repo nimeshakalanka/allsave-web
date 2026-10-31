@@ -11,7 +11,7 @@ export default function Home() {
             <span className="text-xl font-semibold tracking-tight">AllSave</span>
           </div>
           <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">Save videos in one tap</h1>
-          <p className="mt-3 text-sm text-zinc-400 sm:text-base">TikTok, YouTube and Instagram: video in your quality, or MP3 audio.</p>
+          <p className="mt-3 text-sm text-zinc-400 sm:text-base">TikTok, YouTube, Instagram and Facebook: video in your quality, or MP3 audio.</p>
         </header>
         <Downloader />
       </main>

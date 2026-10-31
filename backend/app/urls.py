@@ -14,9 +14,10 @@ ALLOWED_HOSTS: dict[str, str] = {
     **dict.fromkeys(("tiktok.com", "www.tiktok.com", "m.tiktok.com", "vm.tiktok.com", "vt.tiktok.com"), "tiktok"),
     **dict.fromkeys(("youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be"), "youtube"),
     **dict.fromkeys(("instagram.com", "www.instagram.com"), "instagram"),
+    **dict.fromkeys(("facebook.com", "www.facebook.com", "m.facebook.com", "web.facebook.com", "fb.watch"), "facebook"),
 }
 # Short-link hosts that only redirect; we follow them ourselves so every hop is re-validated.
-SHORT_HOSTS = {"vm.tiktok.com", "vt.tiktok.com"}
+SHORT_HOSTS = {"vm.tiktok.com", "vt.tiktok.com", "fb.watch"}
 MAX_URL_LEN = 2048
 _UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
 
@@ -62,7 +63,7 @@ def validate_url(raw: str, resolve: Callable[[str], list[str]] | None = None) ->
     host = (parts.hostname or "").lower().rstrip(".")
     platform = ALLOWED_HOSTS.get(host)
     if platform is None:
-        raise APIError(400, "unsupported_site", "Only TikTok, YouTube and Instagram links are supported.")
+        raise APIError(400, "unsupported_site", "Only TikTok, YouTube, Instagram and Facebook links are supported.")
     ensure_public(host, resolve)
     return platform, urlunsplit(("https", host, parts.path or "/", parts.query, ""))
 
@@ -93,6 +94,9 @@ def follow_short_link(url: str, proxy_url: str | None = None) -> str:
 def normalize(raw: str, proxy_url: str | None = None) -> tuple[str, str]:
     """Validate, expand short links (re-validating every hop) and return (platform, url). Blocking."""
     platform, url = validate_url(raw)
-    if urlsplit(url).hostname in SHORT_HOSTS:
+    parts = urlsplit(url)
+    if parts.hostname in SHORT_HOSTS or (platform == "facebook" and parts.path.startswith("/share/")):
         platform, url = validate_url(follow_short_link(url, proxy_url))
+        if platform == "facebook" and urlsplit(url).path.startswith("/login"):
+            raise APIError(403, "login_required", "Facebook wants a login for this link. Open the video and copy its full link.")
     return platform, url

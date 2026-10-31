@@ -14,7 +14,7 @@ import {
   type MediaOption,
 } from "@/lib/api";
 
-const PLATFORMS = { tiktok: "TikTok", youtube: "YouTube", instagram: "Instagram" } as const;
+const PLATFORMS = { tiktok: "TikTok", youtube: "YouTube", instagram: "Instagram", facebook: "Facebook" } as const;
 const POLL_MS = 1200;
 
 interface Job extends JobStatus {
@@ -55,7 +55,7 @@ export default function Downloader() {
     e?.preventDefault();
     const value = url.trim();
     if (!value) {
-      setError("Paste a TikTok, YouTube or Instagram link first.");
+      setError("Paste a TikTok, YouTube, Instagram or Facebook link first.");
       inputRef.current?.focus();
       return;
     }
@@ -281,7 +281,7 @@ function JobPanel({ job, onRetry, onReset }: { job: Job; onRetry: () => void; on
 
 function EmptyState() {
   const steps = [
-    ["Paste", "Copy a video link from TikTok, YouTube or Instagram."],
+    ["Paste", "Copy a video link from TikTok, YouTube, Instagram or Facebook."],
     ["Choose", "Pick a video quality or MP3 audio."],
     ["Save", "Download the file straight to your device."],
   ];
